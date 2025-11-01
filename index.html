@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player de Vídeo Crow - Simulação</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" xintegrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Estilos personalizados */
+        body {
+            /* Cor de fundo roxa escura principal do site */
+            background-color: #15001f;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Oculta os controles de vídeo padrão do navegador */
+        video::-webkit-media-controls {
+            display: none !important;
+        }
+        video::media-controls {
+            display: none !important;
+        }
+
+        /* Animação de pulso para a logo de carregamento */
+        @keyframes scale-pulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
+            50% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
+        }
+        .animate-scale-pulse {
+            animation: scale-pulse 2s infinite ease-in-out;
+        }
+
+        /* Estilização da barra de progresso (Scrubber) */
+        .video-scrubber {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 5px;
+            /* Fundo da barra (cor verde com transparência) */
+            background: rgba(49, 204, 124, 0.2);
+            border-radius: 5px;
+            outline: none;
+            cursor: pointer;
+            transition: height 0.2s ease;
+        }
+        
+        /* Estilização da barra de volume */
+        .volume-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 70px; /* Barra de volume mais curta */
+            height: 5px;
+            /* Fundo da barra (cor verde com transparência) */
+            background: rgba(49, 204, 124, 0.2);
+            border-radius: 5px;
+            outline: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            /* Cor de destaque verde */
+            background: #31cc7c;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .volume-slider::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            /* Cor de destaque verde */
+            background: #31cc7c;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        /* A "bolinha" (thumb) do scrubber */
+        .video-scrubber::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            /* Cor de destaque verde */
+            background: #31cc7c;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .video-scrubber::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #31cc7c;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        /* Efeito de hover no scrubber */
+        .video-scrubber:hover {
+            height: 8px;
+        }
+        .video-scrubber:hover::-webkit-slider-thumb {
+            transform: scale(1.2);
+        }
+        .video-scrubber:hover::-moz-range-thumb {
+            transform: scale(1.2);
+        }
+
+        /* Novas classes de Proporção de Tela (Corrigidas de verdade) */
+        .video-aspect-contain { /* Padrão */
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            aspect-ratio: auto;
+        }
+        .video-aspect-cover { /* Preencher */
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            aspect-ratio: auto;
+        }
+        .video-aspect-21-9 {
+            max-width: 100%;  /* Garante que não saia da tela */
+            max-height: 100%; /* Garante que não saia da tela */
+            aspect-ratio: 21 / 9;
+            object-fit: fill; /* Força o preenchimento (distorce) */
+        }
+        .video-aspect-4-3 {
+            max-width: 100%;
+            max-height: 100%;
+            aspect-ratio: 4 / 3;
+            object-fit: fill;
+        }
+        .video-aspect-1-1 {
+            max-width: 100%;
+            max-height: 100%;
+            aspect-ratio: 1 / 1;
+            object-fit: fill;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div id="app-container" class="min-h-screen flex flex-col items-center justify-center p-8">
+        <h1 class="text-5xl font-bold text-[#ab05f2] mb-4">CROW</h1>
+        <p class="text-xl text-gray-300 mb-8">Simulação do Site de Streaming</p>
+        <button id="launch-player-btn" class="flex items-center justify-center bg-[#31cc7c] text-[#15001f] font-bold rounded-md py-3 px-8 hover:bg-[#bafedd] transition-colors text-lg">
+            <i class="fas fa-play mr-2"></i>
+            <span>Assistir Série (3 Ep.)</span>
+        </button>
+    </div>
+
+    <div id="video-player" class="fixed inset-0 bg-[#15001f] z-[100] flex items-center justify-center hidden" 
+         onmousemove="showControls()" 
+         onclick="togglePlayPauseMain()">
+        
+        <video 
+            id="video-element" 
+            class="video-aspect-contain" /* Classe inicial SEM w-full/h-full */
+            onloadeddata="handleLoadedData()"
+            ontimeupdate="handleTimeUpdate()"
+            onended="handleVideoEnd()"
+            onwaiting="handleBuffering()"
+            onplaying="handlePlaying()">
+            Seu navegador não suporta a tag de vídeo.
+        </video>
+
+        <div id="loading-overlay" class="absolute inset-0 flex items-center justify-center overflow-hidden z-20">
+            <img 
+                src="https://media.themoviedb.org/t/p/w500_and_h282_face/de6iC707SwuMsE3y2fo5OHCOsvj.jpg" 
+                alt="Carregando poster"
+                class="absolute inset-0 w-full h-full object-cover filter blur-lg scale-110 opacity-70"
+            >
+            <div class="absolute inset-0 bg-gradient-to-t from-[#15001f]/70 via-[#15001f]/30 to-[#15001f]/70"></div>
+            <img 
+                src="https://media.themoviedb.org/t/p/w500/lK7vVn0h7F4LOidtxWRAhUHuPdf.png" 
+                alt="Carregando logo"
+                class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-auto h-auto max-w-[40%] max-h-[200px] animate-scale-pulse"
+            >
+        </div>
+
+        <div id="controls-overlay" 
+             class="absolute inset-0 z-10 text-white transition-opacity duration-300" 
+             onclick="hideAllPopups()">
+            
+            <div class="absolute top-0 left-0 right-0 h-28 bg-gradient-to-b from-[#15001f]/95 to-transparent pointer-events-none"></div>
+
+            <div class="absolute top-0 left-0 right-0 p-4 sm:p-6 flex items-center justify-between">
+                <h3 id="video-title" class="text-white text-lg sm:text-xl font-bold shadow-lg">Carregando...</h3>
+                <button 
+                    id="close-player-btn"
+                    class="w-10 h-10 flex items-center justify-center bg-black/50 rounded-full hover:bg-black/80 transition-colors"
+                    aria-label="Fechar player"
+                >
+                    <i class="fas fa-xmark w-6 h-6 relative top-[4px]"></i>
+                </button>
+            </div>
+            
+            <div class="absolute bottom-0 left-0 right-0 h-36 bg-gradient-to-t from-[#15001f]/95 to-transparent pointer-events-none"></div>
+
+            <div class="absolute bottom-0 left-0 right-0 p-4 sm:p-6" onclick="event.stopPropagation()">
+                <div id="scrubber-time-tooltip" class="absolute bottom-16 left-1/2 -translate-x-1/2 bg-[#1e0a2b]/90 backdrop-blur-md rounded-lg shadow-xl py-1 px-2.5 text-sm font-bold opacity-0 hidden transition-opacity duration-150 pointer-events-none z-40">
+                    00:00
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <span id="current-time" class="text-xs w-12 text-center font-medium">00:00</span>
+                    <input 
+                        type="range" 
+                        id="scrubber"
+                        min="0" 
+                        max="100" 
+                        value="0"
+                        class="video-scrubber flex-grow"
+                        oninput="handleScrub()"
+                    >
+                    <span id="total-time" class="text-xs w-12 text-center font-medium">00:00</span>
+                </div>
+
+                <div class="flex items-center justify-between mt-3">
+                    <div class="flex items-center gap-4">
+                        <button id="play-pause-btn" class="text-white text-2xl w-8 h-8 flex items-center justify-center" aria-label="Play/Pause">
+                            <i id="play-pause-icon" class="fas fa-play"></i>
+                        </button>
+                        </div>
+
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-2 group">
+                            <button id="mute-btn" class="text-white text-xl w-8 h-8 flex items-center justify-center" aria-label="Mudo">
+                                <i id="volume-icon" class="fas fa-volume-high"></i>
+                            </button>
+                            <input
+                                type="range"
+                                id="volume-slider"
+                                min="0"
+                                max="1"
+                                step="0.05"
+                                value="1"
+                                class="volume-slider"
+                                oninput="handleVolumeChange(event)"
+                            >
+                        </div>
+                        <button id="captions-btn" class="text-white text-xl w-8 h-8 flex items-center justify-center" aria-label="Legendas">
+                            <i class="fas fa-closed-captioning"></i>
+                        </button>
+                        <button id="aspect-ratio-btn" class="text-white text-xl w-8 h-8 flex items-center justify-center" aria-label="Ajustar proporção">
+                            <i id="aspect-ratio-icon" class="fas fa-up-right-and-down-left-from-center"></i>
+                        </button>
+                        <button id="settings-btn" class="text-white text-xl w-8 h-8 flex items-center justify-center" aria-label="Configurações">
+                            <i class="fas fa-gear"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="settings-popup" class="absolute bottom-24 right-4 sm:right-6 w-56 bg-[#1e0a2b]/90 backdrop-blur-md rounded-lg shadow-2xl p-2 hidden z-30" onclick="event.stopPropagation()">
+                <ul class="text-white">
+                    <li class="p-2.5 rounded flex justify-between items-center">
+                        <span class="text-sm">Passar Automático</span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="autoplay-toggle" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#31cc7c]"></div>
+                        </label>
+                    </li>
+                    <li class="p-2.5 rounded flex justify-between items-center">
+                        <span class="text-sm">Botão de Próximo</span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="next-btn-toggle" class="sr-only peer" checked>
+                            <div class="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#31cc7c]"></div>
+                        </label>
+                    </li>
+
+                    <li class="h-px bg-white/10 my-1"></li>
+
+                    <li class="p-2.5 rounded hover:bg-[#480273]/70 cursor-pointer flex justify-between items-center">
+                        <span class="text-sm">Qualidade</span>
+                        <span class="text-gray-400 text-sm">Auto <i class="fas fa-chevron-right text-xs ml-2"></i></span>
+                    </li>
+                    <li class="p-2.5 rounded hover:bg-[#480273]/70 cursor-pointer flex justify-between items-center">
+                        <span class="text-sm">Velocidade</span>
+                        <span class="text-gray-400 text-sm">Normal <i class="fas fa-chevron-right text-xs ml-2"></i></span>
+                    </li>
+                    <li class="p-2.5 rounded hover:bg-[#480273]/70 cursor-pointer flex justify-between items-center">
+                        <span class="text-sm">Áudio</span>
+                        <span class="text-gray-400 text-sm">Português <i class="fas fa-chevron-right text-xs ml-2"></i></span>
+                    </li>
+                </ul>
+            </div>
+            <div id="aspect-ratio-popup" class="absolute bottom-24 right-[72px] sm:right-[88px] w-48 bg-[#1e0a2b]/90 backdrop-blur-md rounded-lg shadow-2xl p-2 hidden z-30" onclick="event.stopPropagation()">
+                <ul class="text-white text-sm">
+                    <li class="p-2.5 rounded hover:bg-[#480273]/70 cursor-pointer flex justify-between items-center" data-aspect-ratio="contain">
+                        <span>Padrão (Fit)</span>
+                        <i class="fas fa-check text-[#31cc7c] ml-2"></i> </li>
+                    <li class="p-2.5 rounded hover:bg-[#480273]/70 cursor-pointer flex justify-between items-center" data-aspect-ratio="cover">
+                        <span>Preencher (Fill)</span>
+                        <i class="fas fa-check text-[#31cc7c] ml-2 hidden"></i>
+                    </li>
+                    <li class="p-2.5 rounded hover:bg-[#480273]/70 cursor-pointer flex justify-between items-center" data-aspect-ratio="21-9">
+                        <span>21:9</span>
+                        <i class="fas fa-check text-[#31cc7c] ml-2 hidden"></i>
+                    </li>
+                    <li class="p-2.5 rounded hover:bg-[#480273]/70 cursor-pointer flex justify-between items-center" data-aspect-ratio="4-3">
+                        <span>4:3</span>
+                        <i class="fas fa-check text-[#31cc7c] ml-2 hidden"></i>
+                    </li>
+                    <li class="p-2.5 rounded hover:bg-[#480273]/70 cursor-pointer flex justify-between items-center" data-aspect-ratio="1-1">
+                        <span>1:1</span>
+                        <i class="fas fa-check text-[#31cc7c] ml-2 hidden"></i>
+                    </li>
+                </ul>
+            </div>
+            </div>
+        <button id="next-episode-btn" 
+                class="absolute bg-[#480273]/70 text-white font-bold py-2.5 px-5 rounded-lg backdrop-blur-sm transition-all duration-300 ease-in-out opacity-0 pointer-events-none z-20 hover:bg-[#480273]/90"
+                onclick="playNextEpisode()">
+            <i class="fas fa-forward-step mr-2"></i>
+            Próximo Episódio
+        </button>
+
+    </div>
+    <script>
+        // --- (MODIFICADO) DADOS DA FILA DE EPISÓDIOS ---
+        // Fila original (será usada como fallback)
+        const episodeQueue_fallback = [
+            {
+                title: "Duna: Parte Um (Episódio 1)",
+                src: "https://1a-1791.com/video/fww1/34/s8/2/k/u/4/2/ku42y.aaa.mp4"
+            },
+            {
+                title: "O Despertar (Episódio 2)",
+                src: "https://1a-1791.com/video/fww1/34/s8/2/k/u/4/2/ku42y.aaa.mp4"
+            },
+            {
+                title: "A Profecia (Episódio 3)",
+                src: "https://1a-1791.com/video/fww1/34/s8/2/k/u/4/2/ku42y.aaa.mp4"
+            }
+        ];
+        
+        // Fila principal (será definida dinamicamente)
+        let episodeQueue = []; 
+        let currentEpisodeIndex = 0;
+
+        // --- ESTADO DAS CONFIGURAÇÕES ---
+        let isAutoplayEnabled = false;
+        let isNextButtonEnabled = true;
+
+        // --- SELEÇÃO DE ELEMENTOS ---
+        const player = document.getElementById('video-player');
+        const video = document.getElementById('video-element');
+        const videoTitle = document.getElementById('video-title');
+        const launchBtn = document.getElementById('launch-player-btn');
+        const appContainer = document.getElementById('app-container'); // (NOVO)
+        const closeBtn = document.getElementById('close-player-btn');
+        
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const controlsOverlay = document.getElementById('controls-overlay');
+        
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const playPauseIcon = document.getElementById('play-pause-icon');
+        const muteBtn = document.getElementById('mute-btn');
+        const volumeIcon = document.getElementById('volume-icon');
+        const volumeSlider = document.getElementById('volume-slider');
+        const captionsBtn = document.getElementById('captions-btn');
+        const aspectRatioBtn = document.getElementById('aspect-ratio-btn');
+        const aspectRatioPopup = document.getElementById('aspect-ratio-popup');
+        const aspectRatioOptions = document.querySelectorAll('#aspect-ratio-popup li');
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsPopup = document.getElementById('settings-popup');
+        
+        const nextEpisodeBtn = document.getElementById('next-episode-btn');
+        const autoplayToggle = document.getElementById('autoplay-toggle');
+        const nextBtnToggle = document.getElementById('next-btn-toggle');
+        
+        const scrubber = document.getElementById('scrubber');
+        const scrubberTooltip = document.getElementById('scrubber-time-tooltip'); // (NOVO)
+        const currentTimeEl = document.getElementById('current-time');
+        const totalTimeEl = document.getElementById('total-time');
+
+        let controlsTimeout = null;
+
+        // --- (NOVO) Listas de classes para a posição do botão "Próximo" ---
+        const nextBtnOverlayClasses = ['bottom-28', 'right-6', 'sm:bottom-27', 'sm:right-10'];
+        const nextBtnDockedClasses = ['bottom-6', 'right-6', 'sm:bottom-10', 'sm:right-3'];
+
+
+        // --- FUNÇÕES DE CONTROLE DO PLAYER ---
+
+        // (FUNÇÃO 'launchBtn.addEventListener' REMOVIDA DAQUI)
+
+        // Fecha o Player
+        closeBtn.addEventListener('click', () => {
+            player.classList.add('hidden');
+            video.pause();
+            video.src = ""; // Limpa a fonte para parar o download
+            hideAllPopups();
+            
+            // (NOVO) Se o player fechar, mostra a app de novo
+            // (Somente se não foi carregado pela URL)
+            const urlParams = new URLSearchParams(window.location.search);
+            if (!urlParams.has('src')) {
+                appContainer.classList.remove('hidden');
+            }
+        });
+
+        // Carrega um episódio específico da fila
+        function loadEpisode(index) {
+            if (index < 0 || index >= episodeQueue.length) {
+                console.log("Fim da fila.");
+                closePlayer(); // Ou apenas para
+                return;
+            }
+
+            currentEpisodeIndex = index;
+            const episode = episodeQueue[index];
+            
+            // Reseta o estado
+            loadingOverlay.classList.remove('opacity-0', 'pointer-events-none');
+            nextEpisodeBtn.style.opacity = 0;
+            nextEpisodeBtn.style.pointerEvents = 'none';
+            scrubber.value = 0;
+            currentTimeEl.textContent = "00:00";
+            totalTimeEl.textContent = "00:00";
+
+            // Define novos dados
+            videoTitle.textContent = episode.title;
+            video.src = episode.src;
+            video.load();
+            video.play().catch(e => console.log("Autoplay bloqueado."));
+            showControls();
+        }
+
+        // Toca o próximo episódio
+        function playNextEpisode() {
+            if (currentEpisodeIndex + 1 < episodeQueue.length) {
+                loadEpisode(currentEpisodeIndex + 1);
+            } else {
+                console.log("Chegou ao fim da série.");
+                closeBtn.click(); // Fecha o player se for o último
+            }
+        }
+
+        // Mostra os controles e agenda para escondê-los
+        function showControls() {
+            if (controlsTimeout) {
+                clearTimeout(controlsTimeout);
+            }
+            controlsOverlay.classList.remove('opacity-0');
+            // (MODIFICADO) Move o botão "Próximo" para cima
+            nextEpisodeBtn.classList.remove(...nextBtnDockedClasses);
+            nextEpisodeBtn.classList.add(...nextBtnOverlayClasses);
+            
+            document.body.style.cursor = 'default';
+
+            controlsTimeout = setTimeout(() => {
+                // Não esconde os controles se o vídeo estiver pausado ou pop-ups abertos
+                if (!video.paused && settingsPopup.classList.contains('hidden') && aspectRatioPopup.classList.contains('hidden')) {
+                    controlsOverlay.classList.add('opacity-0');
+                    // (MODIFICADO) Move o botão "Próximo" para o canto
+                    nextEpisodeBtn.classList.remove(...nextBtnOverlayClasses);
+                    nextEpisodeBtn.classList.add(...nextBtnDockedClasses);
+                    
+                    document.body.style.cursor = 'none';
+                }
+            }, 3000); // Esconde após 3 segundos
+        }
+
+        // Formata o tempo de segundos para "00:00"
+        function formatTime(timeInSeconds) {
+            const minutes = Math.floor(timeInSeconds / 60);
+            const seconds = Math.floor(timeInSeconds % 60);
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        // --- HANDLERS DE EVENTOS DO VÍDEO ---
+
+        // Vídeo carregou os metadados
+        function handleLoadedData() {
+            totalTimeEl.textContent = formatTime(video.duration);
+            scrubber.max = video.duration;
+            // Esconde o overlay de carregamento quando os dados estiverem prontos
+            setTimeout(() => {
+                loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
+            }, 500);
+        }
+
+        // O tempo do vídeo foi atualizado
+        function handleTimeUpdate() {
+            if (!video.duration) return; // Previne erro no carregamento
+
+            currentTimeEl.textContent = formatTime(video.currentTime);
+            scrubber.value = video.currentTime;
+            
+            // Atualiza o fundo da barra de progresso
+            const progress = (video.currentTime / video.duration) * 100;
+            scrubber.style.background = `linear-gradient(to right, #31cc7c ${progress}%, rgba(49, 204, 124, 0.2) ${progress}%)`;
+            
+            // Lógica do Botão "Próximo Episódio"
+            const timeRemaining = video.duration - video.currentTime;
+            const showNextButtonTime = 90; // (Corrigido) Começa a aparecer em 90s (1:30)
+            const fadeDuration = 10; // (Corrigido) Leva 10s para aparecer
+            
+            // Verifica se o botão está habilitado e se há um próximo episódio
+            if (isNextButtonEnabled && (currentEpisodeIndex + 1 < episodeQueue.length)) {
+                if (timeRemaining <= showNextButtonTime) {
+                    let opacity;
+                    if (timeRemaining <= (showNextButtonTime - fadeDuration)) {
+                        opacity = 0.8; // Totalmente visível (80%)
+                    } else {
+                        // Fading in
+                        const fadeInProgress = (showNextButtonTime - timeRemaining) / fadeDuration;
+                        opacity = fadeInProgress * 0.8;
+                    }
+                    nextEpisodeBtn.style.opacity = opacity;
+                    nextEpisodeBtn.style.pointerEvents = 'auto';
+                } else {
+                    nextEpisodeBtn.style.opacity = 0;
+                    nextEpisodeBtn.style.pointerEvents = 'none';
+                }
+            } else {
+                // Garante que o botão esteja escondido se desabilitado ou se for o último ep
+                nextEpisodeBtn.style.opacity = 0;
+                nextEpisodeBtn.style.pointerEvents = 'none';
+            }
+        }
+
+        // Vídeo está carregando (buffering)
+        function handleBuffering() {
+            loadingOverlay.classList.remove('opacity-0', 'pointer-events-none');
+        }
+
+        // Vídeo voltou a tocar após o buffering
+        function handlePlaying() {
+            loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
+        }
+
+        // Vídeo terminou
+        function handleVideoEnd() {
+            playPauseIcon.classList.remove('fa-pause');
+            playPauseIcon.classList.add('fa-play');
+            showControls(); // Mostra os controles quando o vídeo termina
+            
+            // Lógica de Autoplay
+            if (isAutoplayEnabled) {
+                playNextEpisode();
+            }
+        }
+
+        // Atualiza o ícone de Play/Pause
+        video.addEventListener('play', () => {
+            playPauseIcon.classList.remove('fa-play');
+            playPauseIcon.classList.add('fa-pause');
+            showControls(); // Inicia o timer para esconder os controles
+        });
+
+        video.addEventListener('pause', () => {
+            playPauseIcon.classList.remove('fa-pause');
+            playPauseIcon.classList.add('fa-play');
+            showControls(); // Mostra os controles permanentemente
+        });
+
+        // --- HANDLERS de BOTÕES E INTERAÇÕES ---
+
+        // Botão de Play/Pause
+        playPauseBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideAllPopups();
+            togglePlayPauseMain();
+        });
+        
+        // Clique no vídeo (fora dos controles) para Play/Pause
+        function togglePlayPauseMain() {
+            if (video.paused) {
+                video.play();
+            } else {
+                video.pause();
+            }
+        }
+
+        // Botão de Mudo
+        muteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideAllPopups();
+            toggleMute();
+        });
+        
+        // (NOVA FUNÇÃO) Ação de mutar/desmutar
+        function toggleMute() {
+            const currentVolume = parseFloat(volumeSlider.value);
+            video.muted = !video.muted;
+            
+            if (video.muted) {
+                // Se mutar, guarda o volume anterior (se não for 0) e zera o slider
+                if (currentVolume > 0) {
+                    volumeSlider.dataset.previousVolume = currentVolume;
+                }
+                volumeSlider.value = 0;
+            } else {
+                // Se desmutar, restaura o volume anterior ou 1 (se o anterior for 0)
+                const prevVolume = parseFloat(volumeSlider.dataset.previousVolume) || 1;
+                volumeSlider.value = prevVolume;
+                video.volume = prevVolume;
+            }
+            
+            updateVolumeIcon(volumeSlider.value);
+            updateVolumeSliderFill(volumeSlider.value);
+        }
+
+        // (NOVA FUNÇÃO) Atualiza o ícone de volume
+        function updateVolumeIcon(volume) {
+            const numericVolume = parseFloat(volume);
+            if (video.muted || numericVolume === 0) {
+                volumeIcon.className = 'fas fa-volume-xmark';
+            } else if (numericVolume < 0.5) {
+                volumeIcon.className = 'fas fa-volume-low';
+            } else {
+                volumeIcon.className = 'fas fa-volume-high';
+            }
+        }
+        
+        // (NOVA FUNÇÃO - CORREÇÃO DO BUG) Atualiza o preenchimento visual do slider de volume
+        function updateVolumeSliderFill(volume) {
+            const fillPercent = (video.muted ? 0 : volume) * 100;
+            volumeSlider.style.background = `linear-gradient(to right, #31cc7c ${fillPercent}%, rgba(49, 204, 124, 0.2) ${fillPercent}%)`;
+        }
+
+        // Slider de Volume
+        function handleVolumeChange(e) {
+            e.stopPropagation();
+            const newVolume = parseFloat(e.target.value);
+            video.volume = newVolume;
+            video.muted = newVolume === 0;
+            updateVolumeIcon(newVolume);
+            updateVolumeSliderFill(newVolume);
+        }
+
+        // Arrastar a barra de progresso (Scrubber)
+        function handleScrub() {
+            const newTime = parseFloat(scrubber.value);
+            video.currentTime = newTime;
+            updateScrubberTooltip(newTime); // (MODIFICADO) Atualiza o tooltip
+        }
+
+        // (NOVA FUNÇÃO) Atualiza o tooltip do scrubber
+        function updateScrubberTooltip(time) {
+            if (isNaN(time) || isNaN(video.duration) || video.duration === 0) return;
+            
+            const percent = (time / video.duration) * 100;
+            // Calcula o deslocamento da "bolinha" (thumb) para centralizar o tooltip perfeitamente
+            // 16px é a largura do thumb (definida no CSS)
+            const thumbOffset = (percent / 100 - 0.5) * 16;
+            
+            scrubberTooltip.style.left = `calc(${percent}% - ${thumbOffset}px)`;
+            scrubberTooltip.textContent = formatTime(time);
+        }
+
+        // (NOVOS EVENTOS) Mostra/Esconde o tooltip ao arrastar
+        // (MODIFICADO) Agora usa 'mousemove' para mostrar o tooltip no HOVER
+        scrubber.addEventListener('mousemove', (e) => {
+            if (video.duration) { // Só mostra se o vídeo estiver carregado
+                // Calcula o tempo baseado na posição X do mouse sobre a barra
+                const rect = scrubber.getBoundingClientRect();
+                const offsetX = e.clientX - rect.left;
+                const hoverPercent = Math.max(0, Math.min(1, offsetX / scrubber.offsetWidth));
+                const hoverTime = hoverPercent * video.duration;
+                
+                scrubberTooltip.classList.remove('opacity-0', 'hidden');
+                updateScrubberTooltip(hoverTime); // Atualiza com o tempo de HOVER
+            }
+        });
+
+        /* (REMOVIDO MOUSEUP)
+        scrubber.addEventListener('mouseup', () => {
+            scrubberTooltip.classList.add('opacity-0', 'hidden');
+        });
+        */
+        
+        // (EXISTENTE) 'mouseleave' esconde o tooltip
+        scrubber.addEventListener('mouseleave', () => {
+            // Esconde se o mouse sair da barra
+            scrubberTooltip.classList.add('opacity-0', 'hidden');
+        });
+
+        // --- Lógica dos Pop-ups ---
+        
+        // Função global para fechar todos os pop-ups
+        function hideAllPopups() {
+            settingsPopup.classList.add('hidden');
+            aspectRatioPopup.classList.add('hidden');
+        }
+
+        // Botão de Configurações
+        settingsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isHidden = settingsPopup.classList.contains('hidden');
+            hideAllPopups();
+            if (isHidden) {
+                settingsPopup.classList.remove('hidden');
+            }
+        });
+        
+        // Botão de Legendas (Exemplo)
+        captionsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideAllPopups();
+            // Lógica para mostrar o popup de legendas (a ser criado)
+        });
+
+        // Botão de Proporção
+        aspectRatioBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isHidden = aspectRatioPopup.classList.contains('hidden');
+            hideAllPopups();
+            if (isHidden) {
+                aspectRatioPopup.classList.remove('hidden');
+            }
+        });
+
+        // Opções de Proporção
+        aspectRatioOptions.forEach(option => {
+            option.addEventListener('click', (e) => {
+                const newRatio = option.getAttribute('data-aspect-ratio');
+                
+                video.classList.remove(
+                    'video-aspect-contain', 
+                    'video-aspect-cover', 
+                    'video-aspect-21-9', 
+                    'video-aspect-4-3', 
+                    'video-aspect-1-1'
+                );
+                video.classList.add(`video-aspect-${newRatio}`);
+                
+                document.querySelectorAll('#aspect-ratio-popup .fa-check').forEach(icon => {
+                    icon.classList.add('hidden');
+                });
+                option.querySelector('.fa-check').classList.remove('hidden');
+                
+                hideAllPopups();
+            });
+        });
+
+        // --- Lógica dos Toggles de Configuração ---
+        
+        autoplayToggle.addEventListener('change', (e) => {
+            isAutoplayEnabled = e.target.checked;
+        });
+
+        nextBtnToggle.addEventListener('change', (e) => {
+            isNextButtonEnabled = e.target.checked;
+            // Esconde o botão imediatamente se for desmarcado
+            if (!isNextButtonEnabled) {
+                nextEpisodeBtn.style.opacity = 0;
+                nextEpisodeBtn.style.pointerEvents = 'none';
+            }
+        });
+
+
+        // --- (NOVO) LÓGICA DE INICIALIZAÇÃO ---
+
+        // Função para lançar o player (lógica de launch movida para cá)
+        function launchPlayer(isFromUrl) {
+            if (isFromUrl) {
+                // Se a URL tiver 'src', usa esse vídeo
+                const urlParams = new URLSearchParams(window.location.search);
+                const videoSrcFromUrl = urlParams.get('src');
+                const videoTitleFromUrl = urlParams.get('title');
+
+                episodeQueue = [
+                    {
+                        title: videoTitleFromUrl || "Vídeo", // Usa o título da URL or um padrão
+                        src: videoSrcFromUrl
+                    }
+                ];
+                
+                // Desabilita a lógica de "próximo episódio"
+                isNextButtonEnabled = false; 
+                nextBtnToggle.checked = false; 
+                nextBtnToggle.disabled = true;
+                const nextBtnToggleLi = nextBtnToggle.closest('li');
+                if (nextBtnToggleLi) nextBtnToggleLi.classList.add('hidden');
+
+                // Esconde a simulação de app
+                appContainer.classList.add('hidden');
+
+            } else {
+                // Se for pelo botão (fallback), usa a fila original
+                episodeQueue = [...episodeQueue_fallback]; // Copia a fila original
+                
+                // Reabilita a lógica de "próximo episódio"
+                isNextButtonEnabled = true; 
+                nextBtnToggle.checked = true;
+                nextBtnToggle.disabled = false;
+                const nextBtnToggleLi = nextBtnToggle.closest('li');
+                if (nextBtnToggleLi) nextBtnToggleLi.classList.remove('hidden');
+            }
+
+            // Ações comuns de launch
+            loadEpisode(0); // Carrega o primeiro (e talvez único) episódio
+            player.classList.remove('hidden');
+            hideAllPopups();
+            video.play().catch(e => {
+                console.log("Autoplay foi bloqueado pelo navegador.");
+            });
+            showControls();
+        }
+
+        // Verifica a URL quando a página carrega
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            if (urlParams.has('src')) {
+                // Se 'src' existe, lança o player imediatamente
+                launchPlayer(true);
+            } else {
+                // Se 'src' não existe, configura o botão de launch para usar o fallback
+                launchBtn.addEventListener('click', () => launchPlayer(false));
+            }
+        });
+
+
+        // Inicializa o preenchimento do slider de volume no carregamento
+        updateVolumeSliderFill(video.volume);
+
+    </script>
+</body>
+</html>
